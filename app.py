@@ -10,11 +10,16 @@ st.set_page_config(
     layout="centered"
 )
 
-@st.cache_resource
-def load_model():
-    return tf.keras.models.load_model(
-        "dermascan_finetuned.keras"
-    )
+# Same class order used during training
+labels = [
+    "akiec",
+    "bcc",
+    "bkl",
+    "df",
+    "mel",
+    "nv",
+    "vasc"
+]
 
 class_names = {
     "akiec": "Actinic Keratoses",
@@ -25,6 +30,12 @@ class_names = {
     "nv": "Melanocytic Nevi",
     "vasc": "Vascular Lesions"
 }
+
+@st.cache_resource
+def load_model():
+    return tf.keras.models.load_model(
+        "dermascan_finetuned.keras"
+    )
 
 st.title("DermaScan AI")
 st.write("AI-based Skin Image Classification")
@@ -40,54 +51,106 @@ uploaded_file = st.file_uploader(
 
 if uploaded_file:
 
-    image = Image.open(uploaded_file).convert("RGB")
+    try:
+        image = Image.open(uploaded_file).convert("RGB")
 
-    st.image(
-        image,
-        caption="Uploaded Image",
-        use_container_width=True
-    )
+        st.image(
+            image,
+            caption="Uploaded Image",
+            use_container_width=True
+        )
 
-    if st.button("Analyze Image"):
+        if st.button("Analyze Image"):
 
-        with st.spinner("Analyzing..."):
+            with st.spinner("Analyzing..."):
 
-            model = load_model()
+                model = load_model()
 
-            img = image.resize((224, 224))
-            img_array = np.array(img)
+                # Check model output
+                if model.output_shape[-1] != len(labels):
+                    st.error("Model classes do not match.")
+                    st.stop()
 
-            img_array = tf.keras.applications.mobilenet_v2.preprocess_input(
-                img_array
+                # Match training preprocessing
+                img_array = np.array(image)
+
+                img_tensor = tf.convert_to_tensor(
+                    img_array,
+                    dtype=tf.float32
+                )
+
+                img_tensor = tf.image.resize(
+                    img_tensor,
+                    [224, 224]
+                )
+
+                img_tensor = tf.keras.applications.mobilenet_v2.preprocess_input(
+                    img_tensor
+                )
+
+                img_tensor = tf.expand_dims(
+                    img_tensor,
+                    axis=0
+                )
+
+                predictions = model.predict(
+                    img_tensor,
+                    verbose=0
+                )[0]
+
+                scores = predictions * 100
+
+                sorted_indices = np.argsort(scores)[::-1]
+
+                top_index = sorted_indices[0]
+                top_label = labels[top_index]
+                top_score = scores[top_index]
+
+            st.success("Analysis Completed!")
+
+            st.subheader("Model Output")
+
+            st.write(
+                f"Highest-scoring category: "
+                f"**{class_names[top_label]}**"
             )
 
-            img_array = np.expand_dims(img_array, axis=0)
+            st.metric(
+                "Top Model Score",
+                f"{top_score:.2f}%"
+            )
 
-            predictions = model.predict(img_array)
+            st.caption(
+                "This score is the model's output, "
+                "not its actual diagnostic accuracy."
+            )
 
-            predicted_index = np.argmax(predictions[0])
+            st.subheader("All Category Scores")
 
-            labels = list(class_names.keys())
+            results = []
 
-            predicted_label = labels[predicted_index]
+            for index in sorted_indices:
+                label = labels[index]
 
-            confidence = predictions[0][predicted_index] * 100
+                results.append({
+                    "Category": class_names[label],
+                    "Model Score": f"{scores[index]:.2f}%"
+                })
 
-        st.success("Analysis Completed!")
+            st.table(results)
 
-        st.subheader("Prediction")
+            st.info(
+                "The model's highest score does not confirm "
+                "the presence of a disease. Results are "
+                "experimental and require professional "
+                "medical evaluation."
+            )
 
-        st.write(class_names[predicted_label])
-
-        st.write(
-            f"Model prediction score: {confidence:.2f}%"
-        )
-
-        st.warning(
-            "This result is experimental and is not a medical diagnosis. "
-            "Please consult a qualified healthcare professional."
-        )
+    except Exception as e:
+        st.error(f"Error processing image: {e}")
 
 st.markdown("---")
 
-st.caption("DermaScan AI | Educational Project")
+st.caption(
+    "DermaScan AI | Educational Project"
+)
