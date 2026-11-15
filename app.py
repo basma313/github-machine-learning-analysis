@@ -25,7 +25,7 @@ CLASSES = [
 @st.cache_resource
 def load_model():
     return tf.keras.models.load_model(
-        "dermascan_finetuned.keras"
+        "dermascan_final.keras"
     )
 
 st.markdown("""
