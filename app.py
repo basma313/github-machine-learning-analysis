@@ -190,8 +190,6 @@ p {
     font-size: 14px;
     line-height: 1.5;
     color: #718096;
-}
-
 div.stButton > button {
     background: #19496F;
     color: white;
